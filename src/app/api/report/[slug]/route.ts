@@ -9,6 +9,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ slug: stri
     if (!sql) {
       return NextResponse.json({ error: "Database not configured" }, { status: 500 });
     }
+    const db = sql;
     await ensureDb();
 
     const { slug } = await ctx.params;
@@ -16,7 +17,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ slug: stri
       return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
     }
 
-    const uploadRows = (await sql`
+    const uploadRows = (await db`
       SELECT id, slug, filename, license_cost_pence, currency, total_seats,
              dormant_seats, wasted_pence_per_month, created_at
       FROM ss_uploads WHERE slug = ${slug} LIMIT 1
@@ -37,7 +38,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ slug: stri
     }
     const upload = uploadRows[0];
 
-    const seats = (await sql`
+    const seats = (await db`
       SELECT user_principal_name, display_name, department, job_title, license_sku,
              last_active_at, days_since_active, bucket, role_fit, score, recommendation
       FROM ss_seats WHERE upload_id = ${upload.id}

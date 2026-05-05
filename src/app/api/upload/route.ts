@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_ROWS = 5000;
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest) {
         { status: 500 },
       );
     }
+    const db = sql; // narrow to non-null for use inside closures
     await ensureDb();
 
     const form = await req.formData();
@@ -29,6 +31,12 @@ export async function POST(req: NextRequest) {
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    }
+    if (file.size > MAX_BYTES) {
+      return NextResponse.json(
+        { error: `File too large. Max ${Math.round(MAX_BYTES / 1024 / 1024)}MB.` },
+        { status: 413 },
+      );
     }
 
     const text = await file.text();
@@ -77,7 +85,7 @@ export async function POST(req: NextRequest) {
     const slug = makeSlug();
     const filename = file.name || "upload.csv";
 
-    const inserted = await sql`
+    const inserted = await db`
       INSERT INTO ss_uploads
         (slug, filename, license_cost_pence, currency, total_seats, dormant_seats, wasted_pence_per_month)
       VALUES
@@ -86,13 +94,12 @@ export async function POST(req: NextRequest) {
     `;
     const uploadId = (inserted[0] as { id: number }).id;
 
-    // Batch insert seats. Neon http accepts arrays via unnest.
     const chunkSize = 200;
     for (let i = 0; i < enriched.length; i += chunkSize) {
       const chunk = enriched.slice(i, i + chunkSize);
       await Promise.all(
         chunk.map((e) =>
-          sql`
+          db`
             INSERT INTO ss_seats
               (upload_id, user_principal_name, display_name, department, job_title,
                license_sku, last_active_at, days_since_active, bucket, role_fit, score, recommendation)
